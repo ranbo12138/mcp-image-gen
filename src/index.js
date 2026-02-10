@@ -5,48 +5,85 @@ import { CONFIG } from "./config.js";
 
 const app = express();
 
-// 1. 关键：解析 JSON 请求体，处理 POST /messages 必须
+// 1. 解析 JSON 请求体
 app.use(express.json());
 
-// 变量存储当前的 Transport 实例
-// 注意：这是一个简单的单实例实现。如果在多用户并发场景下，可能需要 Map<SessionID, Transport>
-// 但对于 Zeabur + 本地单人调用场景，这已经足够。
-let transport;
+// 2. Session 管理器 (Map<sessionId, transport>)
+const sessions = new Map();
 
-// 2. SSE 连接端点
+// 3. SSE 连接端点
 app.get("/sse", async (req, res) => {
-  console.log("🔌 新的 SSE 连接请求");
-  
-  // 创建新的 SSE Transport
-  transport = new SSEServerTransport("/messages", res);
-  
-  // 将 MCP Server 连接到这个 Transport
-  await mcpServer.connect(transport);
-  
-  // 连接断开时的清理
-  req.on("close", () => {
-    console.log("❌ SSE 连接断开");
-    // 这里可以做一些清理工作，但 mcp-sdk 通常会自动处理
-  });
-});
+  console.log(`🔌 [SSE] 新连接请求自: ${req.ip}`);
 
-// 3. 消息接收端点
-app.post("/messages", async (req, res) => {
-  if (transport) {
-    // 将收到的消息转发给 Transport 处理
-    await transport.handlePostMessage(req, res);
-  } else {
-    res.status(404).send("No active session");
+  // 创建新的 Transport
+  // 注意："/messages" 是客户端将要发送 POST 请求的路径前缀
+  const transport = new SSEServerTransport("/messages", res);
+  
+  // 此时 transport.sessionId 已经自动生成 (UUID)
+  const sessionId = transport.sessionId;
+  console.log(`✨ [SSE] 会话创建: ${sessionId}`);
+
+  // 存储 Session
+  sessions.set(sessionId, transport);
+
+  // 监听关闭事件 (客户端断开或网络中断)
+  req.on("close", () => {
+    console.log(`❌ [SSE] 连接断开: ${sessionId}`);
+    sessions.delete(sessionId);
+  });
+
+  try {
+    // 连接 MCP Server
+    await mcpServer.connect(transport);
+    
+    // 发送初始日志给客户端 (可选，调试用)
+    // transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+  } catch (error) {
+    console.error(`💥 [SSE] 连接错误: ${sessionId}`, error);
+    sessions.delete(sessionId);
   }
 });
 
-// 健康检查端点 (Zeabur 等平台通常需要)
+// 4. 消息接收端点
+app.post("/messages", async (req, res) => {
+  // 客户端通常会发送请求到 /messages?sessionId=...
+  const sessionId =req.query.sessionId;
+
+  if (!sessionId) {
+    console.warn("⚠️ [POST] 收到缺少 sessionId 的请求");
+    res.status(400).send("Missing sessionId query parameter");
+    return;
+  }
+
+  const transport = sessions.get(sessionId);
+
+  if (!transport) {
+    console.warn(`⚠️ [POST] 找不到会话: ${sessionId} (可能已过期或断开)`);
+    res.status(404).send("Session not found");
+    return;
+  }
+
+  try {
+    // 将消息交给对应的 Transport 处理
+    await transport.handlePostMessage(req, res);
+  } catch (error) {
+    console.error(`💥 [POST] 消息处理出错: ${sessionId}`, error);
+    res.status(500).send(error.message);
+  }
+});
+
+// 5. 健康检查 (Zeabur 需要)
 app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+  res.status(200).json({ 
+    status: "ok", 
+    activeSessions: sessions.size,
+    uptime: process.uptime()
+  });
 });
 
 // 启动服务器
 app.listen(CONFIG.PORT, () => {
-  console.log(`✨ MCP Image Server is running on port ${CONFIG.PORT}`);
+  console.log(`✨ MCP Image Server 2.0 running on port ${CONFIG.PORT}`);
   console.log(`👉 SSE Endpoint: http://localhost:${CONFIG.PORT}/sse`);
+  console.log(`💓 Health Check: http://localhost:${CONFIG.PORT}/health`);
 });
