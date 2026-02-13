@@ -70,7 +70,7 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     const prompt = args.prompt;
     const n = args.n || 1;
     const size = args.size || CONFIG.DEFAULT_SIZE;
-    const responseFormat = args.response_format || "b64_json";
+    const responseFormat = args.response_format || "url";
 
     if (!CONFIG.API_KEY) {
       throw new Error("服务端未配置 API Key，无法生成图像。");

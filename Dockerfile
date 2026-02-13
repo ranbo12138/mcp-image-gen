@@ -5,10 +5,10 @@ FROM node:20-alpine
 WORKDIR /app
 
 # 复制 package.json 和 lock 文件 (如果有)
-COPY package.json ./
+COPY package.json package-lock.json* ./
 
 # 安装依赖
-RUN npm install --production
+RUN npm ci --production
 
 # 复制源代码
 COPY src ./src
@@ -16,5 +16,9 @@ COPY src ./src
 # 暴露端口 (虽然 Zeabur 会自动识别，但写上是好习惯)
 EXPOSE 3000
 
-# 启动命令
-CMD ["npm", "start"]
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+# 启动命令 - 直接使用 node 启动更可靠
+CMD ["node", "src/index.js"]
