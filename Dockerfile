@@ -17,7 +17,8 @@ COPY src ./src
 EXPOSE 3000
 
 # 健康检查 - 使用 node 内置功能，不依赖 wget/curl
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# start-period=15s 给应用足够的启动时间，避免 Zeabur 过早判定为不健康
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # 启动命令 - 直接使用 node 启动更可靠

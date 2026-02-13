@@ -24,54 +24,40 @@ const sessions = new Map();
 app.get("/sse", async (req, res) => {
   console.log(`🔌 [SSE] 新连接请求自: ${req.ip}`);
 
-  // === 关键: 设置 SSE 必需的响应头 ===
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  // 禁用 Nginx 代理缓冲 (Zeabur 使用 Nginx)
-  res.setHeader("X-Accel-Buffering", "no");
-  // 禁用所有中间件缓存
-  res.setHeader("Transfer-Encoding", "chunked");
-  
-  // 立即发送响应头，建立 SSE 连接
-  res.flushHeaders?.();
-
-  // 创建 Transport
-  const transport = new SSEServerTransport("/messages", res);
-  const sessionId = transport.sessionId;
-  
-  console.log(`✨ [SSE] 会话创建: ${sessionId}`);
-  sessions.set(sessionId, transport);
-
-  // 心跳机制 - 立即发送第一个心跳确认连接
-  res.write(": connected\n\n");
-  
-  const keepAliveInterval = setInterval(() => {
-    if (!res.writableEnded) {
-      res.write(": keepalive\n\n");
-      console.log(`💓 [SSE] 心跳: ${sessionId}`);
-    }
-  }, 15000);
-
-  req.on("close", () => {
-    console.log(`❌ [SSE] 连接断开: ${sessionId}`);
-    clearInterval(keepAliveInterval);
-    sessions.delete(sessionId);
-  });
-
-  req.on("error", (err) => {
-    console.error(`⚠️ [SSE] 请求错误: ${sessionId}`, err.message);
-  });
-
   try {
+    // 创建 Transport - 让 MCP SDK 自己处理响应头
+    const transport = new SSEServerTransport("/messages", res);
+    const sessionId = transport.sessionId;
+    
+    console.log(`✨ [SSE] 会话创建: ${sessionId}`);
+    sessions.set(sessionId, transport);
+
+    // 心跳机制
+    const keepAliveInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(": keepalive\n\n");
+        console.log(`💓 [SSE] 心跳: ${sessionId}`);
+      }
+    }, 15000);
+
+    req.on("close", () => {
+      console.log(`❌ [SSE] 连接断开: ${sessionId}`);
+      clearInterval(keepAliveInterval);
+      sessions.delete(sessionId);
+    });
+
+    req.on("error", (err) => {
+      console.error(`⚠️ [SSE] 请求错误: ${sessionId}`, err.message);
+    });
+
+    // 连接 MCP 服务器 - 这会自动处理响应头
     await mcpServer.connect(transport);
     console.log(`✅ [SSE] MCP 连接成功: ${sessionId}`);
+
   } catch (error) {
-    console.error(`💥 [SSE] 连接错误: ${sessionId}`, error);
-    clearInterval(keepAliveInterval);
-    sessions.delete(sessionId);
+    console.error(`💥 [SSE] 连接错误:`, error);
     if (!res.writableEnded) {
-      res.end();
+      res.status(500).end();
     }
   }
 });
