@@ -16,9 +16,9 @@ COPY src ./src
 # 暴露端口 (虽然 Zeabur 会自动识别，但写上是好习惯)
 EXPOSE 3000
 
-# 健康检查
+# 健康检查 - 使用 node 内置功能，不依赖 wget/curl
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD node -e "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # 启动命令 - 直接使用 node 启动更可靠
 CMD ["node", "src/index.js"]

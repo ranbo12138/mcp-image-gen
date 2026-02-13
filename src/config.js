@@ -1,5 +1,12 @@
 import "dotenv/config";
 
+// 调试：打印环境变量加载状态
+console.log("🔧 环境变量加载状态:");
+console.log(`   API_KEY: ${process.env.API_KEY ? `已设置 (${process.env.API_KEY.substring(0, 8)}...)` : "❌ 未设置"}`);
+console.log(`   API_BASE_URL: ${process.env.API_BASE_URL || "使用默认值"}`);
+console.log(`   IMAGE_MODEL: ${process.env.IMAGE_MODEL || "使用默认值"}`);
+console.log(`   PORT: ${process.env.PORT || "使用默认值 3000"}`);
+
 export const CONFIG = {
   // 服务器配置
   PORT: process.env.PORT || 3000,
