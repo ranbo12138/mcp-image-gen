@@ -1,26 +1,32 @@
+/**
+ * 配置管理模块
+ * 统一管理环境变量和配置项
+ */
+
 import "dotenv/config";
 
-// 调试：打印环境变量加载状态
+export interface ServerConfig {
+  port: number;
+  apiBaseUrl: string;
+  apiKey: string | undefined;
+  imageModel: string;
+}
+
+// 打印环境变量加载状态
 console.log("🔧 环境变量加载状态:");
 console.log(`   API_KEY: ${process.env.API_KEY ? `已设置 (${process.env.API_KEY.substring(0, 8)}...)` : "❌ 未设置"}`);
 console.log(`   API_BASE_URL: ${process.env.API_BASE_URL || "使用默认值"}`);
 console.log(`   IMAGE_MODEL: ${process.env.IMAGE_MODEL || "使用默认值"}`);
 console.log(`   PORT: ${process.env.PORT || "使用默认值 3000"}`);
 
-export const CONFIG = {
-  // 服务器配置
-  PORT: process.env.PORT || 3000,
-  
-  // 上游 API 配置
-  API_BASE_URL: process.env.API_BASE_URL || "https://new-api.zonde306.site/v1",
-  API_KEY: process.env.API_KEY, // 必需
-  
-  // 图像生成默认参数
-  DEFAULT_MODEL: process.env.IMAGE_MODEL || "grok-imagine-1.0",
-  DEFAULT_SIZE: "1024x1024",
+export const config: ServerConfig = {
+  port: parseInt(process.env.PORT || "3000", 10),
+  apiBaseUrl: process.env.API_BASE_URL || "https://new-api.zonde306.site/v1",
+  apiKey: process.env.API_KEY,
+  imageModel: process.env.IMAGE_MODEL || "grok-imagine-1.0",
 };
 
-// 检查必需的环境变量
-if (!CONFIG.API_KEY) {
+// 检查必需配置
+if (!config.apiKey) {
   console.warn("⚠️ 警告: 未检测到 API_KEY 环境变量。图像生成功能将无法工作。");
 }

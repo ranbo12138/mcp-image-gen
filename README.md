@@ -4,15 +4,16 @@
 
 它作为一个中间件，将 MCP 协议请求转换为标准的 **OpenAI 兼容格式** (`/v1/images/generations`) 图像生成 API 调用。
 
-该项目专为**云端部署**（如 **ClawCloud**, Zeabur, Docker）设计，通过 **SSE (Server-Sent Events)** 提供服务，支持本地 MCP 客户端（如 RikkaHub, Claude Desktop）远程调用。
+该项目专为**云端部署**设计，通过 **Streamable HTTP** 提供服务，支持 MCP 客户端（如 Claude Desktop、RikkaHub）远程调用。
 
 ## ✨ 特性
 
-- **标准 MCP 支持**: 完整实现 MCP 协议，支持 `CallTool` 和 `ListTools`。
-- **SSE 传输层**: 专为云环境优化的 Server-Sent Events 通信（含心跳保活）。
-- **OpenAI 兼容**: 适配任何支持 `/v1/images/generations` 的上游 API（如 Grok, DALL-E 等）。
-- **CORS 支持**: 允许 RikkaHub 等 Web 客户端直接跨域连接。
-- **多端运行**: 支持 Docker、VPS、Windows 云电脑以及 **Android Termux**。
+- **TypeScript 重构**: 完整类型安全，使用 Zod 进行参数验证
+- **Streamable HTTP**: MCP 官方推荐的新传输层，更稳定可靠
+- **高级 MCP API**: 使用 `McpServer` + `registerTool` 模式
+- **OpenAI 兼容**: 适配任何支持 `/v1/images/generations` 的上游 API
+- **CORS 支持**: 允许 RikkaHub 等 Web 客户端直接跨域连接
+- **多端运行**: 支持 Docker、Zeabur、Railway、VPS、Android Termux
 
 ## 🛠️ 工具列表
 
@@ -21,85 +22,150 @@
 
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |---|---|---|---|---|
-| `prompt` | string | 是 | 图片的详细描述提示词 | - |
+| `prompt` | string | 是 | 图片的详细描述提示词（建议英文） | - |
 | `n` | integer | 否 | 生成数量 (1-4) | 1 |
-| `size` | string | 否 | 尺寸或比例 (如 `1024x1024`, `16:9`, `9:16`) | `1024x1024` |
-| `response_format` | string | 否 | `b64_json` (直接返回图片) 或 `url` | `b64_json` |
+| `size` | string | 否 | 宽高比：`16:9` `9:16` `1:1` `2:3` `3:2` | `2:3` |
+
+**宽高比说明：**
+- `16:9` - 横屏（视频封面、横幅）
+- `9:16` - 竖屏（手机壁纸、短视频）
+- `1:1` - 正方形（社交媒体头像）
+- `2:3` - 竖向（人像摄影，默认）
+- `3:2` - 横向（风景摄影）
 
 ## 🚀 部署指南
 
-### 📱 Termux (Android 手机) 部署 (推荐)
+### ☁️ 部署到 Zeabur / Railway (推荐)
 
-把旧手机变成 24 小时在线的 AI 生图服务器！
+1. **Fork 本仓库**
 
-1. **安装环境**:
-   ```bash
-   pkg install git nodejs -y
-   ```
+2. **在 Zeabur/Railway 导入仓库**
 
-2. **下载代码**:
-   ```bash
-   git clone https://github.com/ranbo12138/mcp-image-gen.git
-   cd mcp-image-gen
-   npm install
-   ```
+3. **配置环境变量**:
+   - `API_KEY`: `sk-xxxx` (必需)
+   - `API_BASE_URL`: 上游 API 地址 (可选)
 
-3. **配置**:
-   ```bash
-   cp .env.example .env
-   nano .env
-   # 在里面填入您的 API_KEY，按 Ctrl+O 保存，Ctrl+X 退出
-   ```
+4. **部署完成**，获得公网地址
 
-4. **启动**:
-   ```bash
-   # 前台运行 (测试用)
-   npm start
-   
-   # 或 后台运行 (推荐)
-   npm install -g pm2
-   pm2 start src/index.js --name mcp-server
-   pm2 save
-   ```
+### 🐳 Docker 部署
 
-5. **公网访问 (可选)**:
-   如果需要在外面连接手机，安装 Cloudflare Tunnel:
-   ```bash
-   pkg install cloudflared
-   cloudflared tunnel --url http://localhost:3000
-   ```
+```bash
+# 使用 GitHub Container Registry
+docker run -d -p 3000:3000 \
+  -e API_KEY=sk-xxxx \
+  ghcr.io/ranbo12138/mcp-image-gen:latest
 
----
+# 或本地构建
+git clone https://github.com/ranbo12138/mcp-image-gen.git
+cd mcp-image-gen
+docker build -t mcp-image-gen .
+docker run -d -p 3000:3000 -e API_KEY=sk-xxxx mcp-image-gen
+```
 
-### ☁️ 部署到 ClawCloud (推荐云端)
+### 📱 Termux (Android) 部署
 
-本仓库配置了自动化 Workflow，Fork 后 GitHub 会自动构建 Docker 镜像。
+```bash
+# 安装依赖
+pkg install git nodejs -y
 
-1. **GitHub 设置**:
-   - Fork 本仓库。
-   - 在 GitHub 仓库 -> Packages -> Package settings -> Danger Zone -> Change visibility -> **Public**。
+# 克隆项目
+git clone https://github.com/ranbo12138/mcp-image-gen.git
+cd mcp-image-gen
+npm install
 
-2. **ClawCloud 设置**:
-   - **Image Name**: `ghcr.io/<您的用户名>/mcp-image-gen:latest`
-   - **Environment Variables**:
-     - `API_KEY`: `sk-xxxx`
-     - `PORT`: `3000`
+# 构建 TypeScript
+npm run build
 
----
+# 配置环境变量
+cp .env.example .env
+nano .env  # 填入 API_KEY
 
-## ⚙️ 环境变量配置
+# 启动服务
+npm start
 
-| 变量名 (Key) | 必填 | 说明 |
-|-------------|-----|------|
-| `API_KEY` | **是** | 您的上游 API 密钥 |
-| `API_BASE_URL` | 否 | 上游 API 地址 (默认已配好) |
-| `IMAGE_MODEL` | 否 | 指定使用的生图模型 |
-| `PORT` | 否 | 监听端口 (默认 3000) |
+# 或使用 pm2 后台运行
+npm install -g pm2
+pm2 start dist/index.js --name mcp-server
+pm2 save
+```
+
+### 🔧 本地开发
+
+```bash
+npm install
+npm run build    # 编译 TypeScript
+npm start        # 启动服务
+npm run dev      # 开发模式（热重载）
+npm run inspect  # MCP Inspector 测试
+```
+
+## ⚙️ 环境变量
+
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `API_KEY` | **是** | - | 上游 API 密钥 |
+| `API_BASE_URL` | 否 | `https://new-api.zonde306.site/v1` | 上游 API 地址 |
+| `IMAGE_MODEL` | 否 | `grok-imagine-1.0` | 图像生成模型 |
+| `PORT` | 否 | `3000` | 服务端口 |
 
 ## 🔌 客户端连接
 
-SSE 端点格式：
-`http://<IP地址>:3000/sse`
+MCP 端点格式：`https://<your-domain>/mcp`
 
-- **局域网**: `http://192.168.x.x:3000/sse`
-- **公网穿透**: `https://xxxx.trycloudflare.com/sse`
+### Claude Desktop
+
+编辑配置文件 `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "image-generator": {
+      "url": "https://your-domain.com/mcp"
+    }
+  }
+}
+```
+
+### RikkaHub / Web 客户端
+
+在客户端设置中填入 MCP 端点 URL 即可，已配置 CORS 支持浏览器访问。
+
+### curl 测试
+
+```bash
+# 初始化连接
+curl -X POST https://your-domain.com/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+
+# 记录返回的 mcp-session-id
+```
+
+## 📊 服务端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/mcp` | POST | MCP 协议主端点 |
+| `/mcp` | GET | SSE 通知（服务器推送） |
+| `/mcp` | DELETE | 会话终止 |
+| `/health` | GET | 健康检查 |
+
+## 🏗️ 技术栈
+
+- **语言**: TypeScript 5.4+
+- **运行时**: Node.js >= 18
+- **Web 框架**: Express.js
+- **MCP SDK**: @modelcontextprotocol/sdk ^1.0.0
+- **参数验证**: Zod
+- **传输层**: Streamable HTTP
+
+## 📝 版本历史
+
+- **v3.0.0** - TypeScript 重构，Streamable HTTP 传输层，Zod 参数验证
+- **v2.0.x** - SSE 传输层，宽高比参数
+- **v1.0.x** - 初始版本
+
+## 📄 License
+
+MIT
