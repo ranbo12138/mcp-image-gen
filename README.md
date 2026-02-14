@@ -104,7 +104,7 @@ npm run inspect  # MCP Inspector 测试
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `API_KEY` | **是** | - | 上游 API 密钥 |
-| `API_BASE_URL` | 否 | `https://new-api.zonde306.site/v1` | 上游 API 地址 |
+| `API_BASE_URL` | 否 | `https://new-api.xxx.site/v1` | 上游 API 地址 |
 | `IMAGE_MODEL` | 否 | `grok-imagine-1.0` | 图像生成模型 |
 | `PORT` | 否 | `3000` | 服务端口 |
 
