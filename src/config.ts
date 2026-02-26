@@ -18,9 +18,9 @@ export interface ServerConfig {
 console.log("🔧 环境变量加载状态:");
 console.log(`   API_KEY: ${process.env.API_KEY ? `已设置 (${process.env.API_KEY.substring(0, 8)}...)` : "❌ 未设置"}`);
 console.log(`   API_BASE_URL: ${process.env.API_BASE_URL || "使用默认值"}`);
-console.log(`   IMAGE_MODEL: ${process.env.IMAGE_MODEL || "使用默认值"}`);
-console.log(`   EDIT_MODEL: ${process.env.EDIT_MODEL || "使用默认值"}`);
-console.log(`   VIDEO_MODEL: ${process.env.VIDEO_MODEL || "使用默认值"}`);
+console.log(`   IMAGE_MODEL: ${process.env.IMAGE_MODEL || "使用默认值 grok-imagine-1.0"}`);
+console.log(`   EDIT_MODEL: ${process.env.EDIT_MODEL || "使用默认值 grok-imagine-1.0-edit"}`);
+console.log(`   VIDEO_MODEL: ${process.env.VIDEO_MODEL || "使用默认值 grok-imagine-1.0-video"}`);
 console.log(`   PORT: ${process.env.PORT || "使用默认值 3000"}`);
 
 export const config: ServerConfig = {
@@ -28,8 +28,8 @@ export const config: ServerConfig = {
   apiBaseUrl: process.env.API_BASE_URL || "https://new-api.zonde306.site/v1",
   apiKey: process.env.API_KEY,
   imageModel: process.env.IMAGE_MODEL || "grok-imagine-1.0",
-  editModel: process.env.EDIT_MODEL || "grok-imagine-1.0",
-  videoModel: process.env.VIDEO_MODEL || "grok-video-1.0",
+  editModel: process.env.EDIT_MODEL || "grok-imagine-1.0-edit",
+  videoModel: process.env.VIDEO_MODEL || "grok-imagine-1.0-video",
 };
 
 // 检查必需配置

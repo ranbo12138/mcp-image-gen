@@ -13,9 +13,10 @@ const EditImageSchema = {
 
 /** 图像编辑 API 响应格式 */
 interface ImageEditResponse {
-  data: Array<{
-    url?: string;
-    b64_json?: string;
+  choices?: Array<{
+    message?: {
+      content?: string;
+    }
   }>;
 }
 
@@ -43,33 +44,28 @@ export function registerEditImageTool(server: McpServer) {
       console.log(`🎨 收到修图请求: URL="${image}", Prompt="${prompt}"`);
 
       try {
-        // 先下载用户提供的 URL 图片
-        const imgRes = await fetch(image);
-        if (!imgRes.ok) {
-           return {
-             content: [{ type: "text" as const, text: `❌ 无法下载基础图片: ${imgRes.status} ${imgRes.statusText}` }],
-             isError: true
-           }
-        }
-        
-        const blob = await imgRes.blob();
+        const messages = [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: image } }
+                ]
+            }
+        ];
 
-        const formData = new FormData();
-        formData.append("image", blob, "image.png");
-        formData.append("prompt", prompt);
-        formData.append("n", String(n));
-        formData.append("size", size);
-        formData.append("response_format", "url");
-        
-        // Use the configured edit model, fallback to a sensible default if not set
-        formData.append("model", config.editModel || "grok-imagine-1.0-edit");
+        const requestBody = {
+          model: config.editModel || "grok-imagine-1.0-edit",
+          messages: messages,
+        };
 
-        const response = await fetch(`${config.apiBaseUrl}/images/edits`, {
+        const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
           method: "POST",
           headers: {
+            "Content-Type": "application/json",
             Authorization: `Bearer ${config.apiKey}`,
           },
-          body: formData as any,
+          body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -87,32 +83,32 @@ export function registerEditImageTool(server: McpServer) {
         }
 
         const data = (await response.json()) as ImageEditResponse;
-        const content: Array<{ type: "text"; text: string }> = [];
+        let resultUrl = "";
 
-        if (data.data && Array.isArray(data.data)) {
-          for (const item of data.data) {
-            if (item.url) {
-              content.push({
-                type: "text" as const,
-                text: `编辑完成的图片链接: ${item.url}`,
-              });
-            }
-          }
+        if (data.choices && data.choices[0]?.message?.content) {
+            resultUrl = data.choices[0].message.content;
         }
 
-        if (content.length === 0) {
+        if (!resultUrl) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: "❌ API 返回的数据为空或格式无法解析",
+                text: `❌ API 返回成功，但未能提取到图片内容: ${JSON.stringify(data)}`,
               },
             ],
             isError: true,
           };
         }
 
-        return { content };
+        return { 
+           content: [
+             {
+               type: "text" as const,
+               text: `编辑完成的信息/图片链接: ${resultUrl}`,
+             }
+           ]
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error("执行出错:", error);

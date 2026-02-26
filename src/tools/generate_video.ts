@@ -10,8 +10,10 @@ const GenerateVideoSchema = {
 
 /** 视频生成 API 响应格式 */
 interface VideoGenerationResponse {
-  data: Array<{
-    url?: string;
+  choices?: Array<{
+    message?: {
+      content?: string;
+    }
   }>;
 }
 
@@ -39,16 +41,29 @@ export function registerGenerateVideoTool(server: McpServer) {
       console.log(`🎬 收到视频生成请求: Prompt="${prompt}", Image="${image_url || 'N/A'}"`);
 
       try {
-        const requestBody: any = {
-          model: config.videoModel,
-          prompt,
-        };
+        const messages: any[] = [];
         
         if (image_url) {
-          requestBody.image_url = image_url;
+           messages.push({
+               role: "user",
+               content: [
+                 { type: "text", text: prompt },
+                 { type: "image_url", image_url: { url: image_url } }
+               ]
+           });
+        } else {
+           messages.push({
+               role: "user",
+               content: prompt
+           });
         }
 
-        const response = await fetch(`${config.apiBaseUrl}/videos/generations`, {
+        const requestBody = {
+          model: config.videoModel,
+          messages: messages,
+        };
+
+        const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -72,32 +87,33 @@ export function registerGenerateVideoTool(server: McpServer) {
         }
 
         const data = (await response.json()) as VideoGenerationResponse;
-        const content: Array<{ type: "text"; text: string }> = [];
-
-        if (data.data && Array.isArray(data.data)) {
-          for (const item of data.data) {
-            if (item.url) {
-              content.push({
-                type: "text" as const,
-                text: `生成的视频链接: ${item.url}`,
-              });
-            }
-          }
+        let videoUrl = "";
+        
+        // 尝试从不同的返回格式中提取链接
+        if (data.choices && data.choices[0]?.message?.content) {
+            videoUrl = data.choices[0].message.content;
         }
 
-        if (content.length === 0) {
+        if (!videoUrl) {
           return {
             content: [
               {
                 type: "text" as const,
-                text: "❌ API 返回的数据为空或格式无法解析",
+                text: `❌ API 返回成功，但未能提取到视频内容: ${JSON.stringify(data)}`,
               },
             ],
             isError: true,
           };
         }
 
-        return { content };
+        return { 
+           content: [
+             {
+               type: "text" as const,
+               text: `生成的视频信息: ${videoUrl}`,
+             }
+           ]
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error("执行出错:", error);
