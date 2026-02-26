@@ -1,4 +1,6 @@
-# ☁️ MCP Cloud Media Generator
+# ☁️ MCP Cloud Media Generator (v3.1.0-dev)
+
+> ⚠️ **注意**: 此版本为 **v3.1.0 开发测试版**，包含图像编辑和视频生成功能。稳定版请使用 `main` 分支。
 
 这是一个基于 **Model Context Protocol (MCP)** 的媒体生成服务器。
 
@@ -21,6 +23,8 @@
 ### `generate_image`
 根据文本描述生成图片。
 
+**接口**: `POST /v1/images/generations`
+
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |---|---|---|---|---|
 | `prompt` | string | 是 | 图片的详细描述提示词（建议英文） | - |
@@ -37,6 +41,8 @@
 ### `edit_image`
 根据一张图片和提示词进行编辑。
 
+**接口**: `POST /v1/chat/completions`
+
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |---|---|---|---|---|
 | `image` | string | 是 | 基础图片的 URL（HTTP/HTTPS） | - |
@@ -47,10 +53,16 @@
 ### `generate_video`
 根据文本描述或图片生成视频。
 
+**接口**: `POST /v1/chat/completions`
+
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |---|---|---|---|---|
 | `prompt` | string | 是 | 视频的详细描述提示词（建议英文） | - |
 | `image_url` | string | 否 | 作为视频起点的图片 URL | - |
+| `aspect_ratio` | string | 否 | 视频宽高比：`16:9` `9:16` `1:1` `2:3` `3:2` | AI 自动判断 |
+| `video_length` | integer | 否 | 视频时长(秒)：`6` `10` `15` | AI 自动判断 |
+| `resolution_name` | string | 否 | 分辨率：`480p` `720p` | AI 自动判断 |
+| `preset` | string | 否 | 风格预设：`fun` `normal` `spicy` `custom` | AI 自动判断 |
 
 ## 🚀 部署指南
 
