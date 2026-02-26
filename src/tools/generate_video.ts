@@ -6,6 +6,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 const GenerateVideoSchema = {
   prompt: z.string().describe("描述你想要生成的视频的详细提示词（建议使用英文）"),
   image_url: z.string().optional().describe("作为视频生成起点的静态图片URL（可选）。支持 HTTP/HTTPS 链接。"),
+  aspect_ratio: z.enum(["16:9", "9:16", "1:1", "2:3", "3:2"]).optional().describe("视频宽高比，如 16:9、9:16、1:1、2:3、3:2"),
+  video_length: z.union([z.literal(6), z.literal(10), z.literal(15)]).optional().describe("视频时长(秒)，可选 6、10、15"),
+  resolution_name: z.enum(["480p", "720p"]).optional().describe("分辨率，可选 480p 或 720p"),
+  preset: z.enum(["fun", "normal", "spicy", "custom"]).optional().describe("风格预设，可选 fun、normal、spicy、custom"),
 };
 
 /** 视频生成 API 响应格式 */
@@ -25,7 +29,7 @@ export function registerGenerateVideoTool(server: McpServer) {
       description: "调用 AI 模型，将文本提示词或静态图片转换为短视频。",
       inputSchema: GenerateVideoSchema,
     },
-    async ({ prompt, image_url }) => {
+    async ({ prompt, image_url, aspect_ratio, video_length, resolution_name, preset }) => {
       if (!config.apiKey) {
         return {
           content: [
@@ -58,9 +62,17 @@ export function registerGenerateVideoTool(server: McpServer) {
            });
         }
 
+        const video_config: any = {};
+        if (aspect_ratio) video_config.aspect_ratio = aspect_ratio;
+        if (video_length) video_config.video_length = video_length;
+        if (resolution_name) video_config.resolution_name = resolution_name;
+        if (preset) video_config.preset = preset;
+
         const requestBody = {
           model: config.videoModel,
           messages: messages,
+          stream: false,
+          ...(Object.keys(video_config).length > 0 && { video_config }),
         };
 
         const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
@@ -89,7 +101,6 @@ export function registerGenerateVideoTool(server: McpServer) {
         const data = (await response.json()) as VideoGenerationResponse;
         let videoUrl = "";
         
-        // 尝试从不同的返回格式中提取链接
         if (data.choices && data.choices[0]?.message?.content) {
             videoUrl = data.choices[0].message.content;
         }

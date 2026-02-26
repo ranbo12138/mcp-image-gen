@@ -57,6 +57,7 @@ export function registerEditImageTool(server: McpServer) {
         const requestBody = {
           model: config.editModel || "grok-imagine-1.0-edit",
           messages: messages,
+          stream: false,
         };
 
         const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
