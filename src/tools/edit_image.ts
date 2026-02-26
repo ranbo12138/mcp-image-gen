@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "../config.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { FormData } from "formdata-node";
 
 /** edit_image 工具参数 Schema */
 const EditImageSchema = {
@@ -32,7 +33,7 @@ export function registerEditImageTool(server: McpServer) {
           content: [
             {
               type: "text" as const,
-              text: "❌ 服务端未配置 API Key，无法生成图像。请设置 API_KEY 环境变量。",
+              text: "❌ 服务端未配置 API Key，无法修改图像。请设置 API_KEY 环境变量。",
             },
           ],
           isError: true,
@@ -42,22 +43,33 @@ export function registerEditImageTool(server: McpServer) {
       console.log(`🎨 收到修图请求: URL="${image}", Prompt="${prompt}"`);
 
       try {
-        const requestBody = {
-          model: config.editModel,
-          image,
-          prompt,
-          n,
-          size,
-          response_format: "url",
-        };
+        // 先下载用户提供的 URL 图片
+        const imgRes = await fetch(image);
+        if (!imgRes.ok) {
+           return {
+             content: [{ type: "text" as const, text: `❌ 无法下载基础图片: ${imgRes.status} ${imgRes.statusText}` }],
+             isError: true
+           }
+        }
+        
+        const blob = await imgRes.blob();
+
+        const formData = new FormData();
+        formData.append("image", blob, "image.png");
+        formData.append("prompt", prompt);
+        formData.append("n", String(n));
+        formData.append("size", size);
+        formData.append("response_format", "url");
+        
+        // Use the configured edit model, fallback to a sensible default if not set
+        formData.append("model", config.editModel || "grok-imagine-1.0-edit");
 
         const response = await fetch(`${config.apiBaseUrl}/images/edits`, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${config.apiKey}`,
           },
-          body: JSON.stringify(requestBody),
+          body: formData as any,
         });
 
         if (!response.ok) {
