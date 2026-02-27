@@ -183,6 +183,7 @@ curl -X POST https://your-domain.com/mcp \
 | `/mcp` | GET | SSE 通知（服务器推送） |
 | `/mcp` | DELETE | 会话终止 |
 | `/health` | GET | 健康检查 |
+| `/status` | GET | 监控面板（JSON/HTML） |
 
 ## 🏗️ 技术栈
 
