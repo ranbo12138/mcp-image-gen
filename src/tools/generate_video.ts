@@ -7,7 +7,7 @@ const GenerateVideoSchema = {
   prompt: z.string().describe("描述你想要生成的视频的详细提示词（建议使用英文）"),
   image_url: z.string().optional().describe("作为视频生成起点的静态图片URL（可选）。支持 HTTP/HTTPS 链接。"),
   aspect_ratio: z.enum(["16:9", "9:16", "1:1", "2:3", "3:2"]).optional().describe("视频宽高比，如 16:9、9:16、1:1、2:3、3:2"),
-  video_length: z.union([z.literal(6), z.literal(10), z.literal(15)]).optional().describe("视频时长(秒)，可选 6、10、15"),
+  video_length: z.union([z.literal("6"), z.literal("10"), z.literal("15")]).optional().describe("视频时长(秒)，可选 6、10、15"),
   resolution_name: z.enum(["480p", "720p"]).optional().describe("分辨率，可选 480p 或 720p"),
   preset: z.enum(["fun", "normal", "spicy", "custom"]).optional().describe("风格预设，可选 fun、normal、spicy、custom"),
 };
