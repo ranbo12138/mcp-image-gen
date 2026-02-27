@@ -1,8 +1,10 @@
-# ☁️ MCP Cloud Image Generator
+# ☁️ MCP Cloud Media Generator (v3.1.0-dev)
 
-这是一个基于 **Model Context Protocol (MCP)** 的图像生成服务器。
+> ⚠️ **注意**: 此版本为 **v3.1.0 开发测试版**，包含图像编辑和视频生成功能。稳定版请使用 `main` 分支。
 
-它作为一个中间件，将 MCP 协议请求转换为标准的 **OpenAI 兼容格式** (`/v1/images/generations`) 图像生成 API 调用。
+这是一个基于 **Model Context Protocol (MCP)** 的媒体生成服务器。
+
+它作为一个中间件，将 MCP 协议请求转换为标准的 **OpenAI 兼容格式** (`/v1/chat/completions`) 调用上游 AI API。
 
 该项目专为**云端部署**设计，通过 **Streamable HTTP** 提供服务，支持 MCP 客户端（如 Claude Desktop、RikkaHub）远程调用。
 
@@ -11,7 +13,8 @@
 - **TypeScript 重构**: 完整类型安全，使用 Zod 进行参数验证
 - **Streamable HTTP**: MCP 官方推荐的新传输层，更稳定可靠
 - **高级 MCP API**: 使用 `McpServer` + `registerTool` 模式
-- **OpenAI 兼容**: 适配任何支持 `/v1/images/generations` 的上游 API
+- **多工具支持**: 支持图像生成、图像编辑、视频生成
+- **OpenAI 兼容**: 适配任何支持 `/v1/chat/completions` 的上游 API
 - **CORS 支持**: 允许 RikkaHub 等 Web 客户端直接跨域连接
 - **多端运行**: 支持 Docker、Zeabur、Railway、VPS、Android Termux
 
@@ -19,6 +22,8 @@
 
 ### `generate_image`
 根据文本描述生成图片。
+
+**接口**: `POST /v1/images/generations`
 
 | 参数 | 类型 | 必填 | 说明 | 默认值 |
 |---|---|---|---|---|
@@ -32,6 +37,32 @@
 - `1:1` - 正方形（社交媒体头像）
 - `2:3` - 竖向（人像摄影，默认）
 - `3:2` - 横向（风景摄影）
+
+### `edit_image`
+根据一张图片和提示词进行编辑。
+
+**接口**: `POST /v1/chat/completions`
+
+| 参数 | 类型 | 必填 | 说明 | 默认值 |
+|---|---|---|---|---|
+| `image` | string | 是 | 基础图片的 URL（HTTP/HTTPS） | - |
+| `prompt` | string | 是 | 描述你想如何修改图片 | - |
+| `n` | integer | 否 | 生成数量 (1-4) | 1 |
+| `size` | string | 否 | 尺寸：`256x256` `512x512` `1024x1024` | `1024x1024` |
+
+### `generate_video`
+根据文本描述或图片生成视频。
+
+**接口**: `POST /v1/chat/completions`
+
+| 参数 | 类型 | 必填 | 说明 | 默认值 |
+|---|---|---|---|---|
+| `prompt` | string | 是 | 视频的详细描述提示词（建议英文） | - |
+| `image_url` | string | 否 | 作为视频起点的图片 URL | - |
+| `aspect_ratio` | string | 否 | 视频宽高比：`16:9` `9:16` `1:1` `2:3` `3:2` | AI 自动判断 |
+| `video_length` | integer | 否 | 视频时长(秒)：`6` `10` `15` | AI 自动判断 |
+| `resolution_name` | string | 否 | 分辨率：`480p` `720p` | AI 自动判断 |
+| `preset` | string | 否 | 风格预设：`fun` `normal` `spicy` `custom` | AI 自动判断 |
 
 ## 🚀 部署指南
 
@@ -104,8 +135,10 @@ npm run inspect  # MCP Inspector 测试
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `API_KEY` | **是** | - | 上游 API 密钥 |
-| `API_BASE_URL` | 否 | `https://new-api.xxx.site/v1` | 上游 API 地址 |
+| `API_BASE_URL` | 否 | `https://new-api.zonde306.site/v1` | 上游 API 地址 |
 | `IMAGE_MODEL` | 否 | `grok-imagine-1.0` | 图像生成模型 |
+| `EDIT_MODEL` | 否 | `grok-imagine-1.0-edit` | 图像编辑模型 |
+| `VIDEO_MODEL` | 否 | `grok-imagine-1.0-video` | 视频生成模型 |
 | `PORT` | 否 | `3000` | 服务端口 |
 
 ## 🔌 客户端连接
@@ -119,7 +152,7 @@ MCP 端点格式：`https://<your-domain>/mcp`
 ```json
 {
   "mcpServers": {
-    "image-generator": {
+    "media-generator": {
       "url": "https://your-domain.com/mcp"
     }
   }
@@ -150,6 +183,7 @@ curl -X POST https://your-domain.com/mcp \
 | `/mcp` | GET | SSE 通知（服务器推送） |
 | `/mcp` | DELETE | 会话终止 |
 | `/health` | GET | 健康检查 |
+| `/status` | GET | 监控面板（JSON/HTML） |
 
 ## 🏗️ 技术栈
 
@@ -162,6 +196,7 @@ curl -X POST https://your-domain.com/mcp \
 
 ## 📝 版本历史
 
+- **v3.1.0** - 新增图像编辑和视频生成工具，统一使用 chat/completions 接口
 - **v3.0.0** - TypeScript 重构，Streamable HTTP 传输层，Zod 参数验证
 - **v2.0.x** - SSE 传输层，宽高比参数
 - **v1.0.x** - 初始版本

@@ -1,5 +1,5 @@
 /**
- * MCP 图像生成服务器
+ * MCP 媒体生成服务器
  * 使用 StreamableHTTPServerTransport 实现远程访问
  */
 
@@ -8,40 +8,45 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import cors from "cors";
 import { config } from "./config.js";
 
+import { registerGenerateImageTool } from "./tools/generate_image.js";
+import { registerEditImageTool } from "./tools/edit_image.js";
+import { registerGenerateVideoTool } from "./tools/generate_video.js";
+
 // ============================================================================
-// 工具定义
+// 统计计数器
 // ============================================================================
 
-/** 支持的图像宽高比 */
-const AspectRatioSchema = z.enum(["16:9", "9:16", "1:1", "2:3", "3:2"]).default("2:3");
-
-/** generate_image 工具参数 Schema */
-const GenerateImageSchema = {
-  prompt: z.string().describe("图像的详细描述提示词（建议使用英文以获得最佳效果）"),
-  n: z.number().min(1).max(4).default(1).describe("生成图片的数量（默认为 1）"),
-  size: AspectRatioSchema.describe("图片宽高比：'16:9' (横屏)、'9:16' (竖屏)、'1:1' (正方形)、'2:3' (竖向，默认)、'3:2' (横向)"),
+const stats = {
+  startTime: Date.now(),
+  totalRequests: 0,
+  toolCalls: {
+    generate_image: 0,
+    edit_image: 0,
+    generate_video: 0,
+  },
 };
 
-/** 图像生成 API 响应格式 */
-interface ImageGenerationResponse {
-  data: Array<{
-    url?: string;
-    b64_json?: string;
-  }>;
+// ============================================================================
+// 工具调用追踪包装器
+// ============================================================================
+
+function wrapToolRegistration(server: McpServer, toolName: string, registerFn: (server: McpServer) => void) {
+  registerFn(server);
+  stats.toolCalls[toolName as keyof typeof stats.toolCalls]++;
 }
 
-/**
- * 创建 MCP 服务器实例
- */
+// ============================================================================
+// 创建 MCP 服务器实例并注册所有工具
+// ============================================================================
+
 function createMcpServer(): McpServer {
   const server = new McpServer(
     {
-      name: "cloud-image-generator",
-      version: "3.0.0",
+      name: "cloud-media-generator",
+      version: "3.1.0",
     },
     {
       capabilities: {
@@ -50,104 +55,14 @@ function createMcpServer(): McpServer {
     }
   );
 
-  // 注册 generate_image 工具
-  server.registerTool(
-    "generate_image",
-    {
-      title: "Generate Image",
-      description: "调用云端 AI 模型生成图像。支持 5 种宽高比：16:9 (横屏)、9:16 (竖屏)、1:1 (正方形)、2:3 (竖向)、3:2 (横向)。",
-      inputSchema: GenerateImageSchema,
-    },
-    async ({ prompt, n, size }) => {
-      if (!config.apiKey) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "❌ 服务端未配置 API Key，无法生成图像。请设置 API_KEY 环境变量。",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      console.log(`🎨 收到生图请求: "${prompt}" [Ratio: ${size}, N: ${n}]`);
-
-      try {
-        const requestBody = {
-          model: config.imageModel,
-          prompt,
-          n,
-          size,
-          response_format: "url",
-          stream: false,
-        };
-
-        const response = await fetch(`${config.apiBaseUrl}/images/generations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.apiKey}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`API Error: ${response.status}`, errorText);
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `❌ API 请求失败: ${response.status} - ${errorText}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const data = (await response.json()) as ImageGenerationResponse;
-        const content: Array<{ type: "text"; text: string }> = [];
-
-        if (data.data && Array.isArray(data.data)) {
-          for (const item of data.data) {
-            if (item.url) {
-              content.push({
-                type: "text" as const,
-                text: `生成的图片链接: ${item.url}`,
-              });
-            }
-          }
-        }
-
-        if (content.length === 0) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "❌ API 返回的数据为空或格式无法解析",
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        return { content };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error("执行出错:", error);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `❌ 图像生成失败: ${message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }
-  );
+  registerGenerateImageTool(server);
+  stats.toolCalls.generate_image++;
+  
+  registerEditImageTool(server);
+  stats.toolCalls.edit_image++;
+  
+  registerGenerateVideoTool(server);
+  stats.toolCalls.generate_video++;
 
   return server;
 }
@@ -158,7 +73,6 @@ function createMcpServer(): McpServer {
 
 const app = express();
 
-// CORS 配置 - 允许浏览器客户端访问
 app.use(
   cors({
     origin: "*",
@@ -169,25 +83,21 @@ app.use(
 
 app.use(express.json());
 
-// Session 存储
 const transports: Map<string, StreamableHTTPServerTransport> = new Map();
 
 // ============================================================================
 // MCP 端点处理
 // ============================================================================
 
-/**
- * POST /mcp - 客户端到服务器的通信
- */
 app.post("/mcp", async (req: Request, res: Response) => {
+  stats.totalRequests++;
+  
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   let transport: StreamableHTTPServerTransport;
 
   if (sessionId && transports.has(sessionId)) {
-    // 复用现有 transport
     transport = transports.get(sessionId)!;
   } else if (!sessionId && isInitializeRequest(req.body)) {
-    // 新的初始化请求
     console.log(`🔌 [MCP] 新连接请求自: ${req.ip}`);
 
     transport = new StreamableHTTPServerTransport({
@@ -198,7 +108,6 @@ app.post("/mcp", async (req: Request, res: Response) => {
       },
     });
 
-    // 清理关闭的 transport
     transport.onclose = () => {
       if (transport.sessionId) {
         transports.delete(transport.sessionId);
@@ -209,7 +118,6 @@ app.post("/mcp", async (req: Request, res: Response) => {
     const server = createMcpServer();
     await server.connect(transport);
   } else {
-    // 无效请求
     res.status(400).json({
       jsonrpc: "2.0",
       error: {
@@ -221,13 +129,9 @@ app.post("/mcp", async (req: Request, res: Response) => {
     return;
   }
 
-  // 处理请求
   await transport.handleRequest(req, res, req.body);
 });
 
-/**
- * GET /mcp - SSE 通知（服务器到客户端）
- */
 app.get("/mcp", async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
@@ -240,9 +144,6 @@ app.get("/mcp", async (req: Request, res: Response) => {
   await transport.handleRequest(req, res);
 });
 
-/**
- * DELETE /mcp - 会话终止
- */
 app.delete("/mcp", async (req: Request, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
@@ -263,8 +164,203 @@ app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({
     status: "ok",
     activeSessions: transports.size,
-    version: "3.0.0",
+    version: "3.1.0",
   });
+});
+
+// ============================================================================
+// 状态监控面板
+// ============================================================================
+
+app.get("/status", (_req: Request, res: Response) => {
+  const uptime = Math.floor((Date.now() - stats.startTime) / 1000);
+  const hours = Math.floor(uptime / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const seconds = uptime % 60;
+  
+  const memUsage = process.memoryUsage();
+  
+  const statusData = {
+    server: {
+      version: "3.1.0",
+      uptime: `${hours}h ${minutes}m ${seconds}s`,
+      uptimeSeconds: uptime,
+    },
+    requests: {
+      total: stats.totalRequests,
+    },
+    tools: {
+      generate_image: stats.toolCalls.generate_image,
+      edit_image: stats.toolCalls.edit_image,
+      generate_video: stats.toolCalls.generate_video,
+      total: stats.toolCalls.generate_image + stats.toolCalls.edit_image + stats.toolCalls.generate_video,
+    },
+    sessions: {
+      active: transports.size,
+    },
+    memory: {
+      rss: `${Math.round(memUsage.rss / 1024 / 1024)} MB`,
+      heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)} MB`,
+      heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)} MB`,
+    },
+  };
+
+  const accept = _req.headers.accept || "";
+  if (accept.includes("text/html")) {
+    res.send(`
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Media Server - Status</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { 
+      color: #fff; 
+      text-align: center; 
+      margin-bottom: 40px;
+      font-size: 2.5em;
+    }
+    .card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .card h2 { 
+      color: #4ecdc4; 
+      margin-bottom: 20px; 
+      font-size: 1.3em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .stat-item {
+      background: rgba(0,0,0,0.3);
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .stat-value { 
+      font-size: 2em; 
+      font-weight: bold; 
+      color: #fff;
+    }
+    .stat-label { 
+      color: #aaa; 
+      margin-top: 5px;
+      font-size: 0.9em;
+    }
+    .tool-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    .tool-name { color: #fff; font-weight: 500; }
+    .tool-count { 
+      background: #4ecdc4; 
+      color: #1a1a2e; 
+      padding: 5px 15px; 
+      border-radius: 20px;
+      font-weight: bold;
+    }
+    .status-ok {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      background: #4ecdc4;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎛️ MCP Media Server</h1>
+    
+    <div class="card">
+      <h2><span class="status-ok"></span> 服务器状态</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-value">${statusData.server.uptime}</div>
+          <div class="stat-label">运行时间</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${statusData.requests.total}</div>
+          <div class="stat-label">总请求数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${statusData.sessions.active}</div>
+          <div class="stat-label">活跃会话</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>📊 工具调用统计</h2>
+      <div class="tool-item">
+        <span class="tool-name">🖼️ generate_image</span>
+        <span class="tool-count">${statusData.tools.generate_image}</span>
+      </div>
+      <div class="tool-item">
+        <span class="tool-name">✏️ edit_image</span>
+        <span class="tool-count">${statusData.tools.edit_image}</span>
+      </div>
+      <div class="tool-item">
+        <span class="tool-name">🎬 generate_video</span>
+        <span class="tool-count">${statusData.tools.generate_video}</span>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>💾 内存使用</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-value">${statusData.memory.rss}</div>
+          <div class="stat-label">RSS</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${statusData.memory.heapUsed}</div>
+          <div class="stat-label">Heap Used</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${statusData.memory.heapTotal}</div>
+          <div class="stat-label">Heap Total</div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="text-align: center; color: #666; margin-top: 30px;">
+      <small>v${statusData.server.version} | Auto-refresh in 30s</small>
+    </div>
+  </div>
+  <script>setTimeout(() => location.reload(), 30000);</script>
+</body>
+</html>
+    `);
+    return;
+  }
+  
+  res.status(200).json(statusData);
 });
 
 // ============================================================================
@@ -272,7 +368,8 @@ app.get("/health", (_req: Request, res: Response) => {
 // ============================================================================
 
 app.listen(config.port, "0.0.0.0", () => {
-  console.log(`✨ MCP Image Server v3.0.0 运行在端口 ${config.port} (0.0.0.0)`);
+  console.log(`✨ MCP Media Server v3.1.0 运行在端口 ${config.port} (0.0.0.0)`);
   console.log(`👉 MCP Endpoint: http://localhost:${config.port}/mcp`);
   console.log(`👉 Health Check: http://localhost:${config.port}/health`);
+  console.log(`👉 Status Panel: http://localhost:${config.port}/status`);
 });
