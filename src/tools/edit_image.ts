@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { config } from "../config.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { FormData } from "formdata-node";
+
+/** 如果是 HTTP/HTTPS 链接，先下载转为 Base64 data URL，绕过上游白名单 */
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`下载图片失败: ${response.status} ${url}`);
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const buffer = await response.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+  return `data:${contentType};base64,${base64}`;
+}
 
 /** 统一转换图片参数为 Base64 data URL 或 HTTP URL 字符串 */
 function resolveImageUrl(input: unknown): string {
@@ -67,10 +76,19 @@ export function registerEditImageTool(server: McpServer) {
         };
       }
 
-      const imageUrl = resolveImageUrl(image);
       console.log(`🎨 收到修图请求: Prompt="${prompt}"`);
 
       try {
+        // 第一步：统一解析图片参数格式
+        let imageUrl = resolveImageUrl(image);
+
+        // 第二步：如果是外部 HTTP 链接，下载转为 Base64，绕过上游白名单限制
+        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+          console.log(`🔄 检测到 HTTP 链接，正在下载转换为 Base64...`);
+          imageUrl = await fetchImageAsBase64(imageUrl);
+          console.log(`✅ 转换完成`);
+        }
+
         const messages = [
           {
             role: "user",
