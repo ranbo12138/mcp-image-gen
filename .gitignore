@@ -1,4 +1,39 @@
+# 构建输出
 dist/
+
+# 依赖
 node_modules/
+
+# 环境变量（包含敏感信息）
 .env
+.env.local
+.env.*.local
+
+# IDE 和编辑器
+.vscode/
+.idea/
+.codebuddy/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*
+
+# 临时文件
 temp.*
+*.tmp
+
+# 测试和覆盖率
+coverage/
+
+# 打包文件
+*.tgz
+
+# 本地测试脚本
+test-*.ps1
+test-*.json
