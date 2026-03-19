@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-这是一个基于 **Model Context Protocol（MCP）** 的图像生成服务器项目。项目作为中间件，将 MCP 协议请求转换为标准的 OpenAI 兼容格式（`/v1/images/generations`）调用上游图像生成 API。专为云端部署场景设计，通过 **Streamable HTTP** 提供服务，支持 Claude Desktop、RikkaHub 等 MCP 客户端远程连接。
+这是一个基于 ** Model Context Protocol（MCP）** 的图像生成服务器项目。项目作为中间件，将 MCP 协议请求转换为标准的 OpenAI 兼容格式（`/v1/images/generations`）调用上游图像生成 API。专为云端部署场景设计，通过 **Streamable HTTP** 提供服务，支持 Claude Desktop、RikkaHub 等 MCP 客户端远程连接。
 
 ## 技术栈
 

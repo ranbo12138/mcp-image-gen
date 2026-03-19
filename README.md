@@ -1,7 +1,7 @@
 # ☁️ MCP Cloud Media Generator (v3.1.1)
 
 这是一个基于 **Model Context Protocol (MCP)** 的媒体生成服务器。
-它作为一个强大的中间件，将 MCP 协议请求无缝转换为标准的 **OpenAI 兼容格式**，从而调用上游 AI API 进行图像与视频的生成及编辑。
+它通过 MCP 工具直接调用上游 AI API，提供图像生成、图像编辑与视频生成能力。
 
 > 💡 **接口调用说明**：本项目在底层智能路由了两种不同的上游接口格式：
 > - `POST /v1/images/generations`: 专用于图像生成（文生图）
@@ -15,7 +15,7 @@
 
 - 🛡️ **TypeScript 重构**: 提供完整的类型安全，使用 Zod 进行严格的输入参数验证。
 - ⚡ **Streamable HTTP**: 采用 MCP 官方推荐的新一代传输层，长连接更稳定可靠。
-- 🧩 **多源图片格式兼容**: **[New]** 智能解析输入的图片参数，原生支持 `HTTP/HTTPS` 链接、OpenAI `image_url` 对象以及 **Gemini 独有的 `inline_data` (Base64) 格式**。
+- 🧩 **标准图片输入兼容**: 图像编辑与视频生成工具支持 OpenAI 标准 `image_url` 对象，并兼容 `HTTP/HTTPS` 链接与 `data:image/...;base64,...` Data URL。
 - 🛠️ **多模态工具矩阵**: 集成图像生成、图像编辑、视频生成三大核心能力。
 - 🌐 **CORS 友好**: 内置跨域支持，允许 RikkaHub 等 Web 端 AI 平台直接连接。
 - 📦 **全平台部署**: 完美适配 Docker、Zeabur、Railway、VPS，甚至支持 Android Termux 手机端运行。
@@ -40,9 +40,8 @@
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |:---|:---|:---:|:---|:---|
-| `image` | string/object | **是** | - | 基础图片的 URL。**支持 HTTP/HTTPS 链接，同时也支持大模型传入的 Base64 格式 (包括 Gemini 的 `inline_data` 对象)。** |
+| `image_url` | object | **是** | - | 基础图片，必须使用 OpenAI 标准结构：`{ "type": "image_url", "image_url": { "url": "..." } }`。支持 `http(s)` URL 与 `data:image/...;base64,...`。 |
 | `prompt` | string | **是** | - | 详细描述你想如何修改这张图片。 |
-| `n` | integer | 否 | `1` | 生成数量，范围 (1-4)。 |
 | `size` | string | 否 | `1024x1024` | 输出尺寸：`256x256`, `512x512`, `1024x1024`。 |
 
 ### 3. `generate_video` (视频生成)
@@ -54,11 +53,85 @@
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |:---|:---|:---:|:---|:---|
 | `prompt` | string | **是** | - | 视频的详细描述提示词（建议英文）。 |
-| `image_url`| string/object | 否 | - | 作为视频生成起点的静态图片。**支持常规网页链接及 Base64 对象格式。** |
+| `image_url`| object | 否 | - | 作为视频生成起点的静态图片。必须使用 OpenAI 标准结构：`{ "type": "image_url", "image_url": { "url": "..." } }`。支持 `http(s)` URL 与 `data:image/...;base64,...`。 |
 | `aspect_ratio`| string | 否 | 自动 | 视频宽高比：`16:9`, `9:16`, `1:1`, `2:3`, `3:2`。 |
 | `video_length`| string | 否 | 自动 | 视频时长(秒)：`6`, `10`, `15`。 |
 | `resolution_name`| string | 否 | 自动 | 输出分辨率：`480p`, `720p`。 |
 | `preset` | string | 否 | 自动 | 风格预设：`fun`, `normal`, `spicy`, `custom`。 |
+
+### `edit_image` 调用示例
+
+远程 URL：
+
+```json
+{
+  "image_url": {
+    "type": "image_url",
+    "image_url": {
+      "url": "https://example.com/source-image.jpg"
+    }
+  },
+  "prompt": "Turn this product photo into a warm studio portrait.",
+  "size": "1024x1024"
+}
+```
+
+Base64 Data URL：
+
+```json
+{
+  "image_url": {
+    "type": "image_url",
+    "image_url": {
+      "url": "data:image/jpeg;base64,/9j/..."
+    }
+  },
+  "prompt": "Add cinematic lighting and a shallow depth of field.",
+  "size": "1024x1024"
+}
+```
+
+### `generate_video` 调用示例
+
+远程 URL：
+
+```json
+{
+  "prompt": "Animate this still image into a subtle camera push-in.",
+  "image_url": {
+    "type": "image_url",
+    "image_url": {
+      "url": "https://example.com/keyframe.png"
+    }
+  },
+  "aspect_ratio": "16:9",
+  "video_length": "6",
+  "resolution_name": "720p"
+}
+```
+
+Base64 Data URL：
+
+```json
+{
+  "prompt": "Make the character smile and gently turn toward the camera.",
+  "image_url": {
+    "type": "image_url",
+    "image_url": {
+      "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."
+    }
+  },
+  "preset": "normal"
+}
+```
+
+### 非法输入示例
+
+如果 `image_url.image_url.url` 不是 `http(s)` URL，也不是合法的 `data:image/{png|jpeg|webp|gif};base64,...`，工具会返回清晰错误，例如：
+
+```text
+❌ edit_image 参数不合法: image_url.image_url.url 必须是 http(s) URL 或 data:image/<png|jpeg|webp|gif>;base64,...
+```
 
 ---
 
@@ -152,7 +225,7 @@ npm start
 
 ## 📝 版本历史
 
-- **v3.1.1** - 优化图片解析逻辑，底层兼容 OpenAI `image_url` 及 Gemini 的 Base64 `inline_data` 格式，大幅提升多模型协作成功率。
+- **v3.1.1** - 优化图片解析逻辑，支持 OpenAI 标准 `image_url` 对象以及 Base64 Data URL 输入。
 - **v3.1.0** - 新增 `edit_image` 和 `generate_video` 工具，全面分离 `/images/generations` 与 `/chat/completions` 接口规范。
 - **v3.0.0** - 彻底使用 TypeScript 重构，引入 Streamable HTTP 传输层与 Zod 参数验证机制。
 - **v2.0.x** - 引入 SSE 传输层，新增图像宽高比自定义参数。
